@@ -411,6 +411,28 @@ behaved differently afterwards. If the rewire didn't work, say exactly where it
 broke — the error text and the last thing that worked. That earns the point in
 full. -->
 
+I moved `search_listings` behind MCP. `mcp_server.py` registers it with
+FastMCP, using the same name and typed inputs as the Tool Inventory
+(`description: str`, `size: str | None`, `max_price: float | None`), and a
+description written for an agent that can't see the code: the units (US
+dollars, inclusive), the whole-piece size rule, and that an empty list means
+no match. `python mcp_client.py` lists it with `description` required and
+`size` and `max_price` optional.
+
+In `agent.py::run_agent`, the search step now calls
+`call_tool("search_listings", {...})` instead of the function directly.
+Nothing behaved differently afterwards. I saved the direct results for three
+queries (`vintage graphic tee` ≤ $30, `jeans` size M, `ballgown` XS ≤ $5) and
+compared them with the MCP results: all three were equal, and the empty case
+still came back as `[]`, not `None` or a string, so the no-results branch
+still works. To confirm the agent really uses the server, I pointed the client
+at a missing server file. The run then failed with `MCPError`, so the search
+can't be going around MCP.
+
+`_no_results_message` still calls `search_listings` directly. Those extra
+searches only work out which filter is blocking an empty result, they aren't
+the agent's search step, and each MCP call starts a new server process.
+
 
 
 ---
