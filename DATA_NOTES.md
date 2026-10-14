@@ -35,3 +35,11 @@ vintage, denim, classic, grunge, earth tones), but a usevintage, denim, classic,
   A synonym can return an empty search even when a good match exists.
   Options: search title + description too, a small   Options: search title + description too, a small   Options: search tit P  Options: search title + description too, a small   Optionsee")
   still finds the matching v  still finds the matching v  still finds the matching v  still finds the matching v  still fer $5'
+
+## Query parsing (decide in the loop milestone)
+search_listings receives already-parsed values; parsing happens in
+agent.py before the tool is called.
+- "under thirty dollars": regex finds no number; the model can parse it.
+- "30-40 dollars": search_listings has max_price only, no min_price.
+  Plan: use the upper bound (40.0) as max_price; note it as a known limit.
+EOF

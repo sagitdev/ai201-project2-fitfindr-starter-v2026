@@ -59,24 +59,64 @@
 
 ### `search_listings`
 
-- **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Searches `data/listings.json` and returns the listings
+  that match the description, and optionally a size and a price ceiling,
+  best match first.
+- **Inputs:**
+  - `description` (str): keywords for what the user wants, e.g.
+    `"vintage graphic tee"`.
+  - `size` (str | None): the size to filter by, e.g. `"M"`. `None` skips
+    the size filter.
+  - `max_price` (float | None): the highest price allowed, inclusive
+    (a $30.0 item passes `max_price=30.0`). `None` skips the price filter.
+- **Returns:** `list[dict]` — full listing dicts, each with `id`, `title`,
+  `description`, `category`, `style_tags` (list), `size`, `condition`,
+  `price` (float), `colors` (list), `brand` (str or None), `platform`.
+  Sorted by score, highest first, at most `config.SEARCH_RESULT_LIMIT`
+  items.
+  - **Score:** split `description` into lowercase words. Count how many
+    of those words appear as whole words in the listing's `title`,
+    `description`, or `style_tags` (so `"tee"` does not count inside
+    `"steel"`). Listings scoring 0 are dropped.
+    Known limit: no plurals or synonyms, so `"tees"` does not match
+    `"tee"` and `"retro"` does not match `"vintage"`.
+  - **Size match rule:** lowercase both sizes and split them on `/`,
+    spaces, and parentheses. A listing matches when one of its pieces is
+    exactly equal to the requested size. So `"M"` matches `"S/M"` and
+    `"M"`; `"S"` does not match `"US 9"`; `"L"` does not match `"XL"`;
+    `"8"` does not match `"W28"`.
+    Known limit: `"M"` does not match a size written as `"Medium"`.
+- **When it has nothing:** returns `[]` (an empty list). Never `None`,
+  never raises.
 
 ### `suggest_outfit`
 
-- **What it does:**
+- **What it does:** Asks the model for one or two outfits that combine the
+  new item with pieces from the user's wardrobe.
 - **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+  - `new_item` (dict): one listing dict, as returned by `search_listings`.
+  - `wardrobe` (dict): `{"items": [...]}`, each item with `id`, `name`,
+    `category`, `colors`, `style_tags`, `notes` (may be None), as in
+    `data/wardrobe_schema.json`.
+- **Returns:** `str` — a non-empty string with one or two outfit
+  suggestions, each naming the wardrobe pieces it uses by their `name`.
+- **When it has nothing:** if `wardrobe["items"]` is `[]`, it still returns
+  a non-empty string: general styling advice for the new item alone.
+  Never returns `""`, never raises.
 
 ### `create_fit_card`
 
-- **What it does:**
+- **What it does:** Asks the model to write a short caption someone would
+  actually post about the find.
 - **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+  - `outfit` (str): the outfit text returned by `suggest_outfit`.
+  - `new_item` (dict): the same listing dict passed to `suggest_outfit`.
+- **Returns:** `str` — a caption of 2 to 4 sentences that reads like a
+  real post, mentions the item's `title`, `price`, and `platform` once
+  each, and does not assume `brand` is present.
+- **When it has nothing:** if `outfit` is empty or only whitespace, it does
+  not call the model and returns a message saying no outfit was given to
+  write a caption for. Never raises.
 
 ---
 
@@ -93,7 +133,11 @@
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:**
+**Branch rule:** If `search_listings` returns an empty list, put a
+"no matching listings" message in the session and stop without calling
+`suggest_outfit`. Otherwise, store the first result (the highest-scoring
+listing) in the session as the selected item and pass it to
+`suggest_outfit`.
 
 **Where it lives:** `agent.py::run_agent`
 
