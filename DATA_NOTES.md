@@ -94,3 +94,35 @@ least one where a substring test would go wrong:
   stayed correc  stayed correc  stayed corre bins" and also "on depop" (store vs online
   app). Not a criterion failure; the model invents details.
   Possible prompt fix: say the item was bought on the platform online.
+
+## Milestone 5 findings
+
+### Loop
+- Parsing chosen: regex (agent.py::_parse_query). Same result every time,
+  which criteria 2 and 5 rely on; 2 model calls per run instead of 3.
+- New known limit: a size without the word "size" ("medium tee") is not
+  parsed. Required so "90s" or "y2k" are not read as sizes.
+- Empty search runs show "0 model calls this session". Evidence for
+  criterion 2 that suggest_outfit and create_fit_card were not called.
+- The empty-search message re-runs search_listings with one filter removed
+  at a time, to say which filter is in the way. No model calls.
+
+### Fit card pattern (seen twice now)
+- M4: "at the bins" + "on depop".
+- M5: "digging through the racks" + "Listed it on depop this morning",
+  which makes the user the seller instead of the buyer.
+- Cause: the prompt says to mention the platform but not that the user
+  bought the item there online. Strong unit 4 improvement candidate.
+
+### Copying output
+- "denimjacket" and "fits likea small" were s- "denimjacket" and "fits liapp- "denimjacket" and "f mo- "deniput. Check before pasting into
+  the README.
+- v2 result: the reader now loosens size and price as well as changing
+  the words (e.g. 'dress size XS under $20' or just 'dress'). Gap fixed.
+- 'denim jacket under $5': the reader keeps the words and raises the
+  price. Called it the easiest message to act on.
+- Remaining gap in both: the reader knows what to change but guesses the
+  new numbers (how far to raise the price, which limit to loosen).
+  Stopped here: the M5 bar is met, and a guess costs one extra search
+  rather than a guaranteed failure. Possible unit 4 improvement: name the
+  lowest matching price, or the sizes that exist.

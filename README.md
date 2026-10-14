@@ -133,17 +133,21 @@
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:** If `search_listings` returns an empty list, put a
-"no matching listings" message in the session and stop without calling
+**Branch rule:** If `search_listings` returns an empty list, put a message
+in `session["error"]` that says which filter to change (raise the price
+limit, remove the size, or use different words), and stop without calling
 `suggest_outfit`. Otherwise, store the first result (the highest-scoring
-listing) in the session as the selected item and pass it to
-`suggest_outfit`.
+listing) in `session["selected_item"]` and pass it to `suggest_outfit`.
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+**How the query is parsed:** Regular expressions, in `agent.py::_parse_query`. In order: a price range (`$30-$40`,`30-40 dollars`) uses the upper bound as `max_price`; otherwise a single price (`$30`, `under 30`, `30 dollars`); then a size, only when it follows the word "size" (`size M`, `size 8.5`, `size US 8`, `size medium`). What is left, minus filler words like "looking", "for", "a", and "under", becomes the description. Each match is cut out of the text so it does not end up in the description. I chose regex over asking the model so parsing gives the same result every time, which criteria 2 and 5 depend on, and so each run costs two model calls instead of three. Known limits: written-out prices ("thirty dollars") are not found; a size without the word "size" ("medium tee") is not found; a range has no
+minimum price.
+<!-- regex, string splitting, or asking the model — say which -->
 
-**What moves through the session:** <!-- which fields, in what order -->
+**What moves through the session:** Each step writes its result into the session and the next step reads it back out, in this order: `query` → `parsed` (description, size, max_price) → `search_results`
+(list of listing dicts) → `selected_item` (`search_results[0]`) → `outfit_suggestion` (str from suggest_outfit, which also reads `wardrobe`) → `fit_card` (str from create_fit_card). On an empty search, `error` is set and `selected_item`, `outfit_suggestion`, and `fit_card` stay `None`.
+<!-- which fields, in what order -->
 
 ---
 
@@ -157,8 +161,41 @@ listing) in the session as the selected item and pass it to
 **One full query**
 
 ```
-$ python app.py ask '...'
+$ python app.py ask 'vintage graphic tee under $30, size M'
 
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   **Outfit 1: Y2K Streetwear**
+*   Y2K Baby Tee — Butterfly Print
+*   Baggy straight-leg jeans, dark wash
+*   Vintage black denim jacket
+*   Chunky white sneakers
+*   Black crossbody bag
+
+*Why it works:* The fitted tee balances the volume of the baggy jeans while leaning into effortless retro streetwear.
+
+**Outfit 2: Casual Contrast**
+*   Y2K Baby Tee — Butterfly Print
+*   Wide-leg khaki trousers
+*   Black combat boots
+*   Brown leather belt
+*   Black crossbody bag
+
+*Why it works:* Pairing the sweet, feminine top with utilitarian trousers and combat boots creates a cool, balanced contrast.
+
+  Fit card: Found this Y2K Baby Tee — Butterfly Print while digging through the racks and knew I had to grab it for $18. I love pairing it with baggy dark wash jeans and a black denim jacket for that effortless retro streetwear vibe. Listed it on depop this morning if anyone wants to steal this look.
+
+0 model calls this session, 2 served from cache
+```
+
+**The empty-search path**
+
+```
+$ python app.py ask 'designer ballgown size XXS under $5'
+
+  No listings matched 'designer ballgown' in size XXS at or under $5. To find something, describe the item with different or fewer words, since nothing in the listings matches 'designer ballgown' at any size or price. A general word like 'tee', 'jeans', 'jacket', or 'dress' is a good start.
+
+0 model calls this session
 ```
 
 **The three tools, tested one at a time**
@@ -228,15 +265,29 @@ Can't write a fit card for Vintage Levi's 501 Jeans — Medium Wash: no outfit w
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I pasted my empty-search message into a fresh AI
+  conversation, with no context about the app, and asked what it would try
+  next after reading it, without rewriting the message.
+- *What came back:* For 'designer ballgown size XXS under $5' it knew to
+  try "dress", but said it would keep XXS and $5, because the message only
+  said "designer ballgown" was the problem. That would likely be a second
+  empty search, since no listing of any kind is XXS at or under $5.
+- *What I changed:* When the words are the problem, `_no_results_message`
+  now also counts listings of any kind within the size and price limit,
+  using the same size rule as search, and says whether those limits need
+  loosening too. Re-asked with the new message: the reader now loosens the
+  size and price as well as changing the words.
 
 **Moment 2**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I asked AI to help build `create_fit_card`, then ran
+  it three times on the same item, as Milestone 4 asks.
+- *What came back:* The three captions were word-for-word identical, which
+  looked like the model wasn't varying at all.
+- *What I changed:* `TEMPERATURE` in `config.py` was already 0.9, so the
+  cause was the cache: identical prompts return the saved answer. Running
+  with `AI201_CACHE=0` gave different wording each time while the price
+  and platform stayed correct, which is what criterion 4 expects.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
