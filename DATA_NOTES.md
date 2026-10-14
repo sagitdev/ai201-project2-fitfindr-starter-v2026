@@ -69,3 +69,28 @@ least one where a substring test would go wrong:
 - Empty wardrobe: the agent still completes all three tool calls.
 - No invented pieces: every wardrobe piece named in the outfit exists
   in the wardrobe.
+
+## Milestone 4 findings
+
+### search_listings
+- False positives from descriptions: 'graphic tee' also returns
+  lst_017 (mesh top, "layering under a graphic tee") and lst_011
+  (cargo pants, "with a long tee"). lst_017 ties the real tees at
+  score 2. Keyword match can't tell "is a tee" from "goes with a tee".
+  Possible unit 4 improvement: weight title words higher.
+- Sizes in the data: no "Medium" (that known limit is gone).
+  "One Size", "One Size (adjustable)", "One Size / Oversized" exist.
+  A requested "one size" will not match, since the rule splits the
+  listing size into "one" and "size". New known limit.
+
+### suggest_outfit
+- Example wardrobe: named only real wardrobe pieces, exact names.
+- Output uses Markdown (**bold**, "-" bullets). Fine for the next
+  tool; may look messy if shown raw on a web page.
+
+### create_fit_card
+- Cache on: the same command returns the same caption word for word.
+- AI201_CACHE=0: different wording each run; price and platform
+  stayed correc  stayed correc  stayed corre bins" and also "on depop" (store vs online
+  app). Not a criterion failure; the model invents details.
+  Possible prompt fix: say the item was bought on the platform online.
