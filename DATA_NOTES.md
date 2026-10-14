@@ -43,3 +43,29 @@ agent.py before the tool is called.
 - "30-40 dollars": search_listings has max_price only, no min_price.
   Plan: use the upper bound (40.0) as max_price; note it as a known limit.
 EOF
+
+## Milestone 3 notes
+
+### Must remember when building the loop
+- Criterion 2: when search is empty, the stop message must say what to
+  change (e.g. raise the price limit, try another size or fewer words),
+  not just "no results".
+- Criterion 3: the trace must show three ids: the first search result,
+  session["selected_item"], and the new_item that reached suggest_outfit.
+  Add trace.step() calls for all three.
+- Criterion 4: the create_fit_card prompt must not insert brand directly,
+  since brand is null for most listings.
+
+### Criterion 5 test plan (pick queries in unit 4)
+Use 5 different queries, each with a size and a price limit. Include at
+least one where a substring test would go wrong:
+- a size "S" query (must not match "US 9")
+- a size "L" query (must not match "XL")
+- a size "M" query (must match "S/M")
+
+### Criterion candidates not used
+- Synonym query: 'retro graphic tee' finds a vintage graphic tee.
+  (Known limit; possible unit 4 improvement.)
+- Empty wardrobe: the agent still completes all three tool calls.
+- No invented pieces: every wardrobe piece named in the outfit exists
+  in the wardrobe.
