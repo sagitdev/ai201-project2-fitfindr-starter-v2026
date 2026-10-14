@@ -1,4 +1,7 @@
-# Data Notes (Milestone 1)
+# FitFindr Notes (Unit 3)
+
+Repository (submit the same URL in unit 4):
+https://github.com/sagitdev/ai201-project2-fitfindr-starter-v2026
 
 ## Where the data comes from
 - data/listings.json: 40 fixed mock listings (modeled on depop,
@@ -22,19 +25,29 @@ search_listings filters on:
 - size is free text: "M", "S/M", "L", "XL (oversized)", "W30 L30", "W28".
   Exact string match misses "S/M" when the user asks for "M".
 - brand and notes can be null.
-- max_price may be missing; skip the price filter t- max_price may be missing;items": [ ... ]}
-Empty wardrobEmpty wardrobEmpty wardrck waEmpty wardrobEmpty wardrobEmpty wardrck waEmpty wardrobEmptyry, colors, style_tags, notes (optional)
+- max_price may be missing; skip the price filter then.
+
+## Wardrobe
+Shape: {"items": [ ... ]}
+Empty wardrobe: {"items": []}  -> check wardrobe["items"], not wardrobe.
+Item fields: id, name, category, colors, style_tags, notes (optional)
 Categories: tops, bottoms, outerwear, shoes, accessories
 
 ## Style vocabulary mismatch
 style_tags are free text in both files. Some overlap (streetwear,
-vintage, denim, classic, grunge, earth tones), but a usevintage, denim, classic, grunge, earth tones), but a usevintag. "retro" vs "vintage").
-- suggest_outfit: lower risk if - suggest_outf the matching, since it
+vintage, denim, classic, grunge, earth tones), but a user or wardrobe
+may use a different word for the same style (e.g. "retro" vs "vintage").
+- suggest_outfit: lower risk if the model does the matching, since it
   understands similar meanings and also uses colors and category.
 - search_listings: higher risk if it uses exact keyword matching.
   A synonym can return an empty search even when a good match exists.
-  Options: search title + description too, a small   Options: search title + description too, a small   Options: search tit P  Options: search title + description too, a small   Optionsee")
-  still finds the matching v  still finds the matching v  still finds the matching v  still finds the matching v  still fer $5'
+  Options: search title + description too, a small synonym map, or let
+  the model normalize the query into dataset tags.
+- Possible acceptance criterion: a synonym query (e.g. "retro tee")
+  still finds the matching vintage listing.
+
+## Empty-search test query
+python app.py ask 'designer ballgown size XXS under $5'
 
 ## Query parsing (decide in the loop milestone)
 search_listings receives already-parsed values; parsing happens in
@@ -42,7 +55,6 @@ agent.py before the tool is called.
 - "under thirty dollars": regex finds no number; the model can parse it.
 - "30-40 dollars": search_listings has max_price only, no min_price.
   Plan: use the upper bound (40.0) as max_price; note it as a known limit.
-EOF
 
 ## Milestone 3 notes
 
@@ -91,7 +103,8 @@ least one where a substring test would go wrong:
 ### create_fit_card
 - Cache on: the same command returns the same caption word for word.
 - AI201_CACHE=0: different wording each run; price and platform
-  stayed correc  stayed correc  stayed corre bins" and also "on depop" (store vs online
+  stayed correct.
+- One caption said "at the bins" and also "on depop" (store vs online
   app). Not a criterion failure; the model invents details.
   Possible prompt fix: say the item was bought on the platform online.
 
@@ -115,8 +128,20 @@ least one where a substring test would go wrong:
   bought the item there online. Strong unit 4 improvement candidate.
 
 ### Copying output
-- "denimjacket" and "fits likea small" were s- "denimjacket" and "fits liapp- "denimjacket" and "f mo- "deniput. Check before pasting into
+- "denimjacket" and "fits likea small" were spaces lost when copying
+  wrapped terminal lines, not model output. Check before pasting into
   the README.
+- Pasting long `cat >> ... << 'EOF'` blocks into the terminal corrupted
+  this file once (repeated and cut-off lines). Edit long notes in VS Code
+  instead.
+
+### Empty-search message check (fresh AI conversation)
+- v1 for 'designer ballgown size XXS under $5': the reader knew to try
+  "dress", but kept XXS and $5 because the message didn't say whether
+  they would block a different item. Likely a second empty search.
+- Fix: when the words are the problem, also count listings of any kind
+  within the size and price limit (same size rule as search), and say
+  whether those limits need loosening too.
 - v2 result: the reader now loosens size and price as well as changing
   the words (e.g. 'dress size XS under $20' or just 'dress'). Gap fixed.
 - 'denim jacket under $5': the reader keeps the words and raises the

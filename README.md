@@ -39,9 +39,16 @@
 
 ## What This Does
 
+FitFindr is a command-line agent for thrift shopping. A user types a
+request in plain language, like `'vintage graphic tee under $30, size M'`,
+and the agent pulls out the description, size, and price limit, then
+searches 40 mock listings from depop, poshmark, and thredUp. It picks the
+best match, suggests one or two outfits built from pieces in the user's
+wardrobe, and writes a short caption they could actually post. If nothing
+matches, it stops before the outfit step and says which part of the request
+to change: the words, the size, or the price.
+
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
-
-
 
 ---
 
@@ -80,12 +87,14 @@
     `"steel"`). Listings scoring 0 are dropped.
     Known limit: no plurals or synonyms, so `"tees"` does not match
     `"tee"` and `"retro"` does not match `"vintage"`.
-  - **Size match rule:** lowercase both sizes and split them on `/`,
-    spaces, and parentheses. A listing matches when one of its pieces is
-    exactly equal to the requested size. So `"M"` matches `"S/M"` and
-    `"M"`; `"S"` does not match `"US 9"`; `"L"` does not match `"XL"`;
-    `"8"` does not match `"W28"`.
-    Known limit: `"M"` does not match a size written as `"Medium"`.
+  - **Size match rule:** lowercase both sizes, then split the listing's
+    size on `/`, spaces, and parentheses. A listing matches when one of
+    those pieces is exactly equal to the requested size. So `"M"` matches
+    `"S/M"` and `"M"`; `"S"` does not match `"US 9"`; `"L"` does not match
+    `"XL"`; `"8"` does not match `"W28"`.
+    Known limit: a requested `"one size"` does not match listings sized
+    `"One Size"`, because the listing's size splits into `"one"` and
+    `"size"`. (The data has no sizes written as `"Medium"`.)
 - **When it has nothing:** returns `[]` (an empty list). Never `None`,
   never raises.
 
@@ -141,13 +150,29 @@ listing) in `session["selected_item"]` and pass it to `suggest_outfit`.
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** Regular expressions, in `agent.py::_parse_query`. In order: a price range (`$30-$40`,`30-40 dollars`) uses the upper bound as `max_price`; otherwise a single price (`$30`, `under 30`, `30 dollars`); then a size, only when it follows the word "size" (`size M`, `size 8.5`, `size US 8`, `size medium`). What is left, minus filler words like "looking", "for", "a", and "under", becomes the description. Each match is cut out of the text so it does not end up in the description. I chose regex over asking the model so parsing gives the same result every time, which criteria 2 and 5 depend on, and so each run costs two model calls instead of three. Known limits: written-out prices ("thirty dollars") are not found; a size without the word "size" ("medium tee") is not found; a range has no
+**How the query is parsed:** Regular expressions, in
+`agent.py::_parse_query`. In order: a price range (`$30-$40`,
+`30-40 dollars`) uses the upper bound as `max_price`; otherwise a single
+price (`$30`, `under 30`, `30 dollars`); then a size, only when it follows
+the word "size" (`size M`, `size 8.5`, `size US 8`, `size medium`). What
+is left, minus filler words like "looking", "for", "a", and "under",
+becomes the description. Each match is cut out of the text so it does not
+end up in the description.
+I chose regex over asking the model so parsing gives the same result every
+time, which criteria 2 and 5 depend on, and so each run costs two model
+calls instead of three.
+Known limits: written-out prices ("thirty dollars") are not found; a size
+without the word "size" ("medium tee") is not found; a range has no
 minimum price.
-<!-- regex, string splitting, or asking the model — say which -->
 
-**What moves through the session:** Each step writes its result into the session and the next step reads it back out, in this order: `query` → `parsed` (description, size, max_price) → `search_results`
-(list of listing dicts) → `selected_item` (`search_results[0]`) → `outfit_suggestion` (str from suggest_outfit, which also reads `wardrobe`) → `fit_card` (str from create_fit_card). On an empty search, `error` is set and `selected_item`, `outfit_suggestion`, and `fit_card` stay `None`.
-<!-- which fields, in what order -->
+**What moves through the session:** Each step writes its result into the
+session and the next step reads it back out, in this order:
+`query` → `parsed` (description, size, max_price) → `search_results`
+(list of listing dicts) → `selected_item` (`search_results[0]`) →
+`outfit_suggestion` (str from suggest_outfit, which also reads
+`wardrobe`) → `fit_card` (str from create_fit_card).
+On an empty search, `error` is set and `selected_item`,
+`outfit_suggestion`, and `fit_card` stay `None`.
 
 ---
 
@@ -193,7 +218,7 @@ $ python app.py ask 'vintage graphic tee under $30, size M'
 ```
 $ python app.py ask 'designer ballgown size XXS under $5'
 
-  No listings matched 'designer ballgown' in size XXS at or under $5. To find something, describe the item with different or fewer words, since nothing in the listings matches 'designer ballgown' at any size or price. A general word like 'tee', 'jeans', 'jacket', or 'dress' is a good start.
+  No listings matched 'designer ballgown' in size XXS at or under $5. To find something, describe the item with different or fewer words, since nothing in the listings matches 'designer ballgown' at any size or price. A general word like 'tee', 'jeans', 'jacket', or 'dress' is a good start. Your other limits are too tight as well: no listing of any kind is in size XXS at or under $5, so loosen those too.
 
 0 model calls this session
 ```
@@ -202,7 +227,7 @@ $ python app.py ask 'designer ballgown size XXS under $5'
 
 ```
 $ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
-[{'id': 'lst_002', 'title': 'Y2K Baby Tee — Butterfly Print', 'description': 'Super cute early 2000s baby tee with butterfly graphic. Fitted crop length. Tag says medium but fits likea small.', 'category': 'tops', 'style_tags': ['y2k', 'vintage', 'graphic tee', 'cottagecore'], 'size': 'S/M', 'condition': 'excellent', 'price': 18.0, 'colors': ['white', 'pink', 'purple'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_006', 'title': 'Graphic Tee — 2003 Tour Bootleg Style', 'description': 'Vintage-style bootleg tee with faded graphic. Slightly boxy fit. 100% cotton, soft and worn-in.', 'category': 'tops', 'style_tags': ['graphic tee', 'vintage', 'grunge', 'streetwear', 'band tee'], 'size': 'L', 'condition': 'good', 'price': 24.0, 'colors': ['black'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_017', 'title': 'Mesh Long-Sleeve Top — Black', 'description': 'Sheer black mesh long-sleeve. Great for layering under a graphic tee or over a bralette. Stretchy material, fits true to size.', 'category': 'tops', 'style_tags': ['y2k', 'grunge', 'goth', 'layering'], 'size': 'S/M', 'condition': 'excellent', 'price': 15.0, 'colors': ['black'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_033', 'title': 'Vintage Band Tee — Faded Grey', 'description': 'Faded grey band-style tee with distressed graphic. Crew neck. Fits boxy. Well-loved but no holes or major damage.', 'category': 'tops', 'style_tags': ['vintage', 'grunge', 'band tee', 'graphic tee', 'streetwear'], 'size': 'L', 'condition': 'fair', 'price': 19.0, 'colors': ['grey', 'charcoal'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_011', 'title': 'Low-Rise Cargo Pants — Khaki','description': 'Y2K era low-rise cargo pants. Lots of pockets. Khaki color, slightly distressed at the hems. Great for layering with a long tee.', 'category': 'bottoms', 'style_tags':['y2k', 'cargo', '2000s', 'streetwear'], 'size': 'W29', 'condition': 'fair', 'price': 27.0, 'colors': ['khaki', 'tan'], 'brand': None, 'platform': 'poshmark'}, {'id': 'lst_015', 'title': 'Vintage Graphic Hoodie — Faded Black', 'description': 'Faded black pullover hoodie with barely-visible vintage graphic on the chest. Cozy interior. Some pilling but adds to the worn-in look.', 'category': 'tops', 'style_tags': ['vintage', 'grunge', 'graphic', 'streetwear'], 'size': 'L', 'condition': 'fair', 'price': 26.0, 'colors': ['black', 'charcoal'], 'brand': None, 'platform': 'depop'}]
+[{'id': 'lst_002', 'title': 'Y2K Baby Tee — Butterfly Print', 'description': 'Super cute early 2000s baby tee with butterfly graphic. Fitted crop length. Tag says medium but fits like a small.', 'category': 'tops', 'style_tags': ['y2k', 'vintage', 'graphic tee', 'cottagecore'], 'size': 'S/M', 'condition': 'excellent', 'price': 18.0, 'colors': ['white', 'pink', 'purple'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_006', 'title': 'Graphic Tee — 2003 Tour Bootleg Style', 'description': 'Vintage-style bootleg tee with faded graphic. Slightly boxy fit. 100% cotton, soft and worn-in.', 'category': 'tops', 'style_tags': ['graphic tee', 'vintage', 'grunge', 'streetwear', 'band tee'], 'size': 'L', 'condition': 'good', 'price': 24.0, 'colors': ['black'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_017', 'title': 'Mesh Long-Sleeve Top — Black', 'description': 'Sheer black mesh long-sleeve. Great for layering under a graphic tee or over a bralette. Stretchy material, fits true to size.', 'category': 'tops', 'style_tags': ['y2k', 'grunge', 'goth', 'layering'], 'size': 'S/M', 'condition': 'excellent', 'price': 15.0, 'colors': ['black'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_033', 'title': 'Vintage Band Tee — Faded Grey', 'description': 'Faded grey band-style tee with distressed graphic. Crew neck. Fits boxy. Well-loved but no holes or major damage.', 'category': 'tops', 'style_tags': ['vintage', 'grunge', 'band tee', 'graphic tee', 'streetwear'], 'size': 'L', 'condition': 'fair', 'price': 19.0, 'colors': ['grey', 'charcoal'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_011', 'title': 'Low-Rise Cargo Pants — Khaki', 'description': 'Y2K era low-rise cargo pants. Lots of pockets. Khaki color, slightly distressed at the hems. Great for layering with a long tee.', 'category': 'bottoms', 'style_tags': ['y2k', 'cargo', '2000s', 'streetwear'], 'size': 'W29', 'condition': 'fair', 'price': 27.0, 'colors': ['khaki', 'tan'], 'brand': None, 'platform': 'poshmark'}, {'id': 'lst_015', 'title': 'Vintage Graphic Hoodie — Faded Black', 'description': 'Faded black pullover hoodie with barely-visible vintage graphic on the chest. Cozy interior. Some pilling but adds to the worn-in look.', 'category': 'tops', 'style_tags': ['vintage', 'grunge', 'graphic', 'streetwear'], 'size': 'L', 'condition': 'fair', 'price': 26.0, 'colors': ['black', 'charcoal'], 'brand': None, 'platform': 'depop'}]
 ```
 
 ```
@@ -242,6 +267,7 @@ $ python -c "from tools import search_listings; print(search_listings('designer 
 ```
 $ python -c "from tools import suggest_outfit; from utils.data_loader import get_empty_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_empty_wardrobe()))"
 It looks like you haven't added any wardrobe items yet, but these vintage Levi's 501s are a blank canvas for endless looks.
+
 Here are two easy ways to style them:
 * **The Casual Classic:** Pair them with a crisp white t-shirt, a leather belt, and retro sneakers for an effortless everyday outfit.
 * **Elevated Streetwear:** Layer an oversized blazer over a simple black tank or hoodie, and finish the look with chunky loafers or boots.
