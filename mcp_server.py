@@ -59,7 +59,7 @@ works with a direct call, and **a documented failure earns the point in full.**
 
 from mcp.server.fastmcp import FastMCP
 
-from tools import search_listings as _search_listings_impl
+from tools import search_listings as _search_listings_impl  # noqa: F401 — you'll use this below
 
 # log_level="WARNING" keeps the server from printing an INFO line for every
 # request. Without it your terminal fills with "Processing request of type
@@ -67,31 +67,24 @@ from tools import search_listings as _search_listings_impl
 mcp = FastMCP("fitfindr", log_level="WARNING")
 
 
-@mcp.tool()
-def search_listings(
-    description: str,
-    size: str | None = None,
-    max_price: float | None = None,
-) -> list[dict]:
-    """
-    Search a fixed set of 40 secondhand clothing listings by keywords, with an
-    optional size and price ceiling, and return the matches best first.
-
-    description: keywords for the item, e.g. "vintage graphic tee". Matched as
-                 whole lowercase words against each listing's title,
-                 description and style tags; no plurals or synonyms.
-    size:        optional, e.g. "M". Case-insensitive, and it must equal one
-                 whole piece of the listing's size, so "M" matches "S/M" but
-                 "L" does not match "XL". Omit to allow any size.
-    max_price:   optional highest price in US dollars, inclusive (30 allows a
-                 $30.00 item). Omit for no price limit.
-
-    Returns a list of up to 10 listing objects with id, title, description,
-    category, style_tags, size, condition, price (dollars), colors, brand
-    (often null) and platform. When nothing matches, it returns an empty list,
-    not an error.
-    """
-    return _search_listings_impl(description, size, max_price)
+# ── TODO: uncomment and fill this in ──────────────────────────────────────────
+#
+# @mcp.tool()
+# def search_listings(
+#     description: str,
+#     size: str | None = None,
+#     max_price: float | None = None,
+# ) -> list[dict]:
+#     """
+#     <-- YOUR DESCRIPTION GOES HERE.
+#
+#         One or two sentences. What does this tool do, what does it need, and
+#         what does it give back when it finds nothing? Written for a reader
+#         who cannot see the code.
+#     """
+#     return _search_listings_impl(description, size, max_price)
+#
+# ──────────────────────────────────────────────────────────────────────────────
 #
 # Two notes on the block above.
 #
