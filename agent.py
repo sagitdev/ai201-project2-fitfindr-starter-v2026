@@ -328,7 +328,10 @@ def run_agent(query: str, wardrobe: dict) -> dict:
                 note = "branch: empty, stopping before suggest_outfit"
             else:
                 next_step = "select"
-                note = f"branch: {len(session['search_results'])} results, continuing"
+                note = (
+                    f"branch: {len(session['search_results'])} results, continuing "
+                    f"(first id {session['search_results'][0].get('id')})"
+                )
             trace.step(
                 "search_listings (via MCP)",
                 inputs=_args_text(parsed),
@@ -342,13 +345,14 @@ def run_agent(query: str, wardrobe: dict) -> dict:
                 "select_item",
                 inputs=f"{len(session['search_results'])} results",
                 returned=session["selected_item"],
-                note="took the first result, the best match",
+                note=f"took the first result, the best match (id {session['selected_item'].get('id')})",
             )
             next_step = "suggest"
 
         elif next_step == "suggest":
             inputs = (
-                f"new_item={session['selected_item'].get('title')!r}, "
+                f"new_item={session['selected_item'].get('id')} "
+                f"{session['selected_item'].get('title')!r}, "
                 f"wardrobe={len((session['wardrobe'] or {}).get('items') or [])} items"
             )
             try:

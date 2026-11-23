@@ -420,20 +420,120 @@ it not to rewrite them. It could act on all three:
      `python run_eval.py --label before` runs everything and writes the table
      into results/. Paste it here and fill in the verdicts. -->
 
+Run: `python run_eval.py --label before` with caching off, 5 tries per
+scenario, temperature 0.9. Full log:
+[`results/run_2026-11-22_2158_before.md`](results/run_2026-11-22_2158_before.md).
+50 runs, 91 model calls, 0 crashes.
+
+**How each try was scored.** `python score_run.py results/run_2026-11-22_2158_before.md`
+reads the log and applies each criterion in `criteria.md` exactly as written:
+
+- **1:** no crash and no early stop. The trace shows `search_listings (via MCP)`,
+  `suggest_outfit` and `create_fit_card`, and the fit card is not one of
+  the tool's fallback messages.
+- **2:** the run stopped. The trace has no `suggest_outfit` or
+  `create_fit_card` step, and the message names something to change.
+- **3:** in the trace, the first search result's id, `selected_item`'s id
+  and the `new_item` id passed to `suggest_outfit` are all equal.
+- **4:** the fit card has 2-4 sentences (pieces ending in `.`, `!` or `?`),
+  the price as `$48` or `$48.00`, and the platform name. It doesn't
+  contain `None`.
+- **5:** "5 different queries", so Try N is query N, not five repeats of
+  one query. The log shows how many listings came back but not every
+  listing's size and price, so the script searches again through MCP.
+  It checks each listing against `max_price` and against the size rule,
+  which it implements separately from `tools.py`. It also checks that all
+  five logged tries had the same result count and first item.
+
+The trace now prints listing ids (`first id …`, `id …`, `new_item=lst_… `)
+so criterion 3 can be read from the trace, as it says. That is only a
+logging change. The agent's behaviour is unchanged.
+
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Impossible query stops before suggest_outfit | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Search item = selected_item = suggest_outfit's new_item (by id) | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card: 2-4 sentences, price, platform, no 'None' | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. Search respects size and price limits (5 queries) | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
-**Real output from one try**, pasted as text, naming the file and function
-that produced it:
+Scenarios (`scenarios.py`): 1 `vintage graphic tee under $30` ·
+2 `designer ballgown size XXS under $5` ·
+3 `silk slip dress in midi length under $40` ·
+4 `platform sneakers size 8` (lst_019, $48, poshmark, brand `None`) ·
+5 `graphic tee size L under $25`, `vintage top size S under $30`,
+`jacket size M under $50`, `chelsea boots size 8.5 under $50`,
+`jeans size W30 under $40`. Each criterion-5 query targets one way the
+filter could go wrong: L vs XL, S vs "US 9", M vs "M/L", a half size, and a
+waist size.
 
+**Real output from one try** (Try 1 of each), produced by
+`agent.py::run_agent` through `run_eval.py::run_once`. Trace lines come from
+`trace.py::step`, and the fit card comes from `tools.py::create_fit_card`.
+
+Criterion 1 (`vintage graphic tee under $30`):
+```
+[2] search_listings (via MCP)
+      in:  description='vintage graphic tee', size=None, max_price=30.0
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+      →    branch: 10 results, continuing (first id lst_002)
+[3] select_item
+      ...
+[4] suggest_outfit
+      in:  new_item=lst_002 'Y2K Baby Tee — Butterfly Print', wardrobe=10 items
+      out: **Outfit 1: Y2K Streetwear** *   Y2K Baby Tee — Butterfly Print *   Baggy straight-leg jeans, dark wash *   Vi…
+[5] create_fit_card
+      in:  outfit=625 chars, new_item='Y2K Baby Tee — Butterfly Print'
+      out: Scored this Y2K Baby Tee with the butterfly print for just $18 and I am obsessed. I threw it on with baggy dar…
+
+Fit card: Scored this Y2K Baby Tee with the butterfly print for just $18 and I am obsessed. I threw it on with baggy dark wash jeans, a vintage denim jacket, and chunky sneakers for that ultimate early 2000s streetwear vibe. Listing it on depop later today so grab it before I change my mind!
 ```
 
+Criterion 2 (`designer ballgown size XXS under $5`). The message comes from
+`agent.py::_no_results_message`:
 ```
+[2] search_listings (via MCP)
+      in:  description='designer ballgown', size='xxs', max_price=5.0
+      out: [] (empty)
+      →    branch: empty, stopping before suggest_outfit
+
+stopped early: No listings matched 'designer ballgown' in size XXS at or under $5. To find something, describe the item with different or fewer words, since nothing in the listings matches 'designer ballgown' at any size or price. A general word like 'tee', 'jeans', 'jacket', or 'dress' is a good start. Your other limits are too tight as well: no listing of any kind is in size XXS at or under $5, so loosen those too.
+```
+
+Criterion 3 (`silk slip dress in midi length under $40`):
+```
+[2] search_listings (via MCP)
+      in:  description='silk slip dress midi length', size=None, max_price=40.0
+      out: 5 items: 90s Silk Slip Dress — Floral, Midi Length, Y2K Baby Tee — Butterfly Print, High-Waisted Denim Shorts — Cutoff … +2 more
+      →    branch: 5 results, continuing (first id lst_013)
+[3] select_item
+      in:  5 results
+      out: 90s Silk Slip Dress — Floral, Midi Length ($30.0, depop)
+      →    took the first result, the best match (id lst_013)
+[4] suggest_outfit
+      in:  new_item=lst_013 '90s Silk Slip Dress — Floral, Midi Length', wardrobe=10 items
+```
+
+Criterion 4 (`platform sneakers size 8`, lst_019, $48, poshmark):
+```
+These Platform Sneakers — White Chunky Sole have the ultimate early 2000s energy with their chunky soles and velcro straps. I grabbed them on poshmark for $48 and immediately styled them with a white ribbed tank, baggy dark wash jeans, and a cropped vintage denim jacket. The little bit of sole yellowing just makes them look authentically vintage.
+```
+
+Criterion 5, query 1 (`graphic tee size L under $25`), with the
+`score_run.py` check underneath:
+```
+[2] search_listings (via MCP)
+      in:  description='graphic tee', size='l', max_price=25.0
+      out: 2 items: Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey
+      →    branch: 2 results, continuing (first id lst_006)
+
+PASS — size='l' max=$25 → lst_006 'L' $24, lst_033 'L' $19
+```
+Without limits, `graphic tee` matches 6 listings. The limits left out the
+$26 Vintage Graphic Hoodie (size L, over the price limit) and three
+listings in other sizes (two `S/M` tops and `W29` cargo pants).
+
+Per-try reasons for all 25 cells are printed by `score_run.py`.
 
 ---
 
