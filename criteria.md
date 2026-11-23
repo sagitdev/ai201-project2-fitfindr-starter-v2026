@@ -89,6 +89,24 @@ not passing them clearly. The `None` check is there because `brand` is null for
 most listings, and a prompt that inserts the brand directly would print "None"
 into the caption.
 
+> **Revised in unit 4:** Given a listing and an outfit, the fit card is 2 to 4
+> sentences, includes the listing's price as a dollar amount and the
+> listing's `platform` name, does not contain the text `None`, **and presents
+> the item as bought on that platform: it never says the user is selling or
+> listing it ("listed it on my depop", "live now on my poshmark",
+> "cross-list"), and never names a different source ("estate sale",
+> "thrifting", "flea market", "bins")** — in at least 4 of 5 tries.
+>
+> **Why revised:** the heading is "the fit card gets the facts right", but
+> the check only tested whether the platform's *name* appeared. In the
+> before run, 20 of 45 fit cards contained the platform name and still
+> stated a false fact about it. For example, "Just listed it over on my
+> depop" made the user the seller of an item they had just bought there.
+> All 20 passed the original wording. The criterion measured whether a
+> word was present, not whether the fact was right. The target stays 4 of
+> 5. Checked by `score_run.py` (`platform_role_problems`), which matched my
+> own reading of all 45 cards.
+
 ---
 
 ## 5. Search respects the size and price limits

@@ -557,13 +557,97 @@ Per-try reasons for all 25 cells are printed by `score_run.py`.
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | Matching query completes all three tools | 4 of 5 | **MET (5/5)** | All 5 traces show `search_listings (via MCP)` → `suggest_outfit` → `create_fit_card`, and each run returned a real fit card, not a fallback message. |
+| 2 | Impossible query stops before `suggest_outfit` | 5 of 5 | **MET (5/5)** | All 5 traces end at step 2 with `branch: empty`, and the message says what to change: different words, and a looser size
+and price. |
+| 3 | Search item = `selected_item` = `suggest_outfit`'s `new_item` | 5 of 5 | **MET (5/5)** | In all 5 traces, the first-result id, the `selected_item` id and the `new_item` id are all `lst_013`. |
+| 4 | Fit card: 2-4 sentences, price, platform, no `None` | 4 of 5 | **MET (5/5)** | Each card has 3 sentences, `$48`, `poshmark` and no `None`. I read all five myself as well. |
+| 4r | *Revised* 4: the above, plus bought on the platform | 4 of 5 | **MET (4/5)** | Try 5 says "They are live now on my poshmark", which makes the user the seller. Tries 1-4 say the user bought them there. |
+| 5 | Search respects size and price limits (5 queries) | 5 of 5 | **MET (5/5)** | Across all 5 queries, every returned listing is at or under `max_price` and matches the size rule. The check uses its own copy of the rule. |
+
+**No criterion missed its target.** That is the honest result. It is not
+evidence that the agent is fine, because the numbers above hide a real
+failure that my original criterion 4 couldn't see.
+
+**Were my targets low?** Partly.
+- **2, 3 and 5** run only my own code, with no model involved. 5 of 5 was
+  the only sensible target, and a deterministic path should hit it.
+- **1** was set at 4 of 5 because a plain keyword search misses some
+  phrasings. But the test query is fixed and known to match, so search
+  can't vary. Only the two model calls can fail, and across 50 runs and
+  91 calls they never did. For this scenario, 4 of 5 was generous.
+- **4** is the one I'd tighten, and I have: see the revision in
+  `criteria.md`. The original checked that the word `poshmark` appeared,
+  not that what the card said about it was true.
+
+**Testing the verdict.** I gave criterion 4, its target, the five sneaker
+cards and my MET verdict to Claude in a fresh conversation. I asked it to
+argue for MISSED as strongly as it could. It made three arguments:
+- **Try 5 makes the user the seller.** This holds. It is the failure the
+  revision now catches.
+- **Try 1's "velcro straps" are made up.** This doesn't hold. The listing
+  says "Velcro straps."
+- **The cards describe different clothes for a fixed outfit.** This
+  doesn't hold either. The outfit isn't fixed: `suggest_outfit` runs again
+  on every try, and each card matches its own try's outfit.
+
+It said that if only the try-5 argument survived, the verdict would be
+4 of 5, MET with no margin. That is the revised result.
 
 **Diagnoses**
+
+There were no misses against the original targets. Below is a diagnosis of
+the failure the revision exposed, because that is where the agent actually
+goes wrong.
+
+**Fit cards misstate the platform. Where: the model's output, caused by
+the `create_fit_card` prompt in `tools.py`.**
+
+`score_run.py` ran the platform check on every fit card in the before run,
+not only the criterion-4 item:
+
+| Item (scenario) | Platform | Cards that misstate the platform |
+|---|---|---|
+| Y2K Baby Tee (criterion 1) | depop | 3 of 5 |
+| 90s Silk Slip Dress (criterion 3) | depop | 4 of 5 |
+| Platform Sneakers (criterion 4) | poshmark | 1 of 5 |
+| Graphic Tee (criterion 5, L) | depop | 1 of 5 |
+| Y2K Baby Tee (criterion 5, S) | depop | 3 of 5 |
+| 90s Track Jacket (criterion 5, M) | poshmark | 3 of 5 |
+| Suede Chelsea Boots (criterion 5, 8.5) | poshmark | 1 of 5 |
+| Vintage Levi's 501 Jeans (criterion 5, W30) | depop | 4 of 5 |
+| Denim Jacket (empty wardrobe) | poshmark | 0 of 5 |
+| **Total** | | **20 of 45** |
+
+- **What goes wrong:** the card either makes the user the seller ("Just
+  listed it over on my depop", "Just dropped them on depop", "It just went
+  live on my poshmark closet"), or names a source other than the platform
+  ("at an estate sale", "while thrifting", "at the local bins and knew I
+  had to list it on depop"). The price, title and platform name are all
+  present, so every one of these passed the original criterion 4.
+- **Mechanism:** the prompt gives the platform with no role. The only rule
+  about it is `- Mention the platform {platform} once.` Nothing says the
+  user *bought* the item there. The system prompt says "captions people
+  post about their thrift finds". depop and poshmark are resale platforms,
+  so captions that mention them are often seller posts, and "thrift finds"
+  invites a thrifting or estate-sale origin story. The model fills the
+  missing role with whichever of those is most likely. The tool passes the
+  right facts and the loop passes the right item (criterion 3 proves the
+  item is correct). The prompt just never states the relationship.
+- **Pattern:** one cause, not twenty separate problems. It is worse on
+  depop (15 of 25 cards) than on poshmark (5 of 20). That fits the
+  explanation, because depop captions are especially often resale posts.
+  If each item had been the criterion-4 test item, 5 of the 9 would have
+  missed the revised 4-of-5 target. The sneakers were one of the
+  cleanest items, so the criterion-4 row looks better than the agent really
+  is.
+
+**Something else I saw that no criterion covers.** In the empty-wardrobe
+runs, the cards say things like "I threw it over a floral midi slip dress".
+They describe pieces the user doesn't own as if they wore them, even though
+`suggest_outfit` correctly gave general advice. The card prompt describes
+the outfit as what the user wore, whatever kind of outfit it is. I'm not
+fixing this in this unit. It is listed here so it isn't lost.
 
 
 

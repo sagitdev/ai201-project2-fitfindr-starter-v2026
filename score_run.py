@@ -180,6 +180,42 @@ def check_4(t: dict) -> tuple[bool, str]:
     return True, f"{n} sentences, ${t['item_price']:g}, {t['item_platform']}, no 'None'"
 
 
+# Revised criterion 4 (unit 4, see criteria.md): the card must also present the
+# item as BOUGHT on the listing's platform. These patterns catch the two ways
+# the before run got that wrong. Checked by hand against all 45 before-run
+# cards: they flag the same 20 cards I flagged reading them.
+SELLING = re.compile(
+    r"cross-?list|\blist(?:ed|ing)?\b|went live|"
+    r"live (?:now )?on my (?:depop|poshmark|thredup|closet|shop)|"
+    r"dropped (?:them|it) (?:over )?on|on my (?:depop|poshmark|thredup|shop)|"
+    r"my shop|posting it on|up for \$|keeping it on",
+    re.I,
+)
+OTHER_SOURCE = re.compile(
+    r"estate sale|thrifting|thrift store|flea market|\bbins\b|garage sale|yard sale", re.I
+)
+
+
+def platform_role_problems(card: str) -> list[str]:
+    """Ways the card misstates where the item came from. Empty list = fine."""
+    problems = []
+    if m := SELLING.search(card):
+        problems.append(f"says the user is selling it ({m.group(0)!r})")
+    if m := OTHER_SOURCE.search(card):
+        problems.append(f"names another source ({m.group(0)!r})")
+    return problems
+
+
+def check_4_revised(t: dict) -> tuple[bool, str]:
+    ok, why = check_4(t)
+    if t["crashed"] or not (t["fit_card"] or "").strip():
+        return ok, why
+    role = platform_role_problems(t["fit_card"])
+    if ok and not role:
+        return True, why + ", bought on the platform"
+    return False, "; ".join(([] if ok else [why]) + role)
+
+
 def _size_ok(wanted: str, listing_size: str) -> bool:
     """The size rule from the Tool Inventory, written again here so the check
     doesn't reuse the code it is checking."""
@@ -255,6 +291,39 @@ def main(path: str) -> None:
         print(f"\n**Criterion {number}**\n")
         for line in notes[number]:
             print(f"- {line}")
+
+    # ── revised criterion 4, added in unit 4 Milestone 4 ──────────────────────
+    card_scenario = next(s for s in scenario_module.SCENARIOS if s["criterion"] == 4)
+    revised = [check_4_revised(t) for t in runs[card_scenario["name"]]]
+    passes = sum(ok for ok, _ in revised)
+    verdict = "MET" if passes >= TARGETS[4] else "MISSED"
+    print("\n**Criterion 4, revised** (adds: the card presents the item as bought "
+          "on the listing's platform)\n")
+    print("| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |")
+    print("|---|---|---|---|---|---|---|---|")
+    marks = " | ".join("PASS" if ok else "FAIL" for ok, _ in revised)
+    print(f"| 4r. Fit card facts incl. bought on the platform | 4 of 5 | {marks} | {verdict} ({passes}/5) |\n")
+    for i, (ok, why) in enumerate(revised, 1):
+        print(f"- Try {i}: {'PASS' if ok else 'FAIL'} — {why}")
+
+    # The same platform check on every fit card in the run, to see whether the
+    # criterion-4 item was typical.
+    print("\n**Platform check on every fit card in this run**\n")
+    print("| Scenario | Item | Cards that misstate the platform |")
+    print("|---|---|---|")
+    bad_total = card_total = 0
+    for scenario in scenario_module.SCENARIOS:
+        cards = [t for t in runs[scenario["name"]] if (t["fit_card"] or "").strip()]
+        if not cards:
+            continue
+        bad = [i for i, t in enumerate(runs[scenario["name"]], 1)
+               if (t["fit_card"] or "").strip() and platform_role_problems(t["fit_card"])]
+        bad_total += len(bad)
+        card_total += len(cards)
+        tries = ", ".join(f"try {i}" for i in bad) or "none"
+        print(f"| {scenario['name']} | {cards[0]['item_title']} ({cards[0]['item_platform']}) "
+              f"| {len(bad)} of {len(cards)} ({tries}) |")
+    print(f"\nTotal: {bad_total} of {card_total} fit cards misstate the platform.")
 
 
 if __name__ == "__main__":
