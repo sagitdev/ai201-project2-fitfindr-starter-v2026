@@ -357,6 +357,58 @@ Can't write a fit card for Vintage Levi's 501 Jeans — Medium Wash: no outfit w
 
 ---
 
+## Failure Modes
+
+I triggered each failure on purpose, one at a time, before changing any code,
+and then again after adding the handler.
+
+| Failure | How I triggered it | Before Milestone 2 | Handler |
+|---|---|---|---|
+| Empty search | `python app.py ask 'designer ballgown size XXS under $5'` | Stops after search and says what to change | None needed: `_no_results_message` (unit 3) |
+| Empty wardrobe | `python app.py ask 'denim jacket under $50' --empty-wardrobe` | Gives general styling advice, no crash and no empty string | None needed: the empty-wardrobe prompt in `suggest_outfit` (unit 3) |
+| Model unavailable | Wrong key via `GEMINI_API_KEY=not-a-real-key-x AI201_CACHE=0`, so `.env` stayed unchanged and nothing was served from cache. Query: `python app.py ask '90s track jacket in size M'` | **Not handled by the agent.** `ModelUnavailable` went straight out of `run_agent()`. Only `app.py`'s catch-all caught it, so it printed `ModelUnavailable: The model rejected your API key…`, exited with code 1, and never said that the search had worked. `run_eval.py` would have logged it as a crash. | **Added:** `run_agent()` catches `ModelUnavailable` at `suggest_outfit` and at `create_fit_card`, puts a message in `session["error"]`, and stops |
+
+**What the agent says now** (real output):
+
+1. Empty search:
+   > No listings matched 'designer ballgown' in size XXS at or under $5. To find something, describe the item with different or fewer words, since nothing in the listings matches 'designer ballgown' at any size or price. A general word like 'tee', 'jeans', 'jacket', or 'dress' is a good start. Your other limits are too tight as well: no listing of any kind is in size XXS at or under $5, so loosen those too.
+
+2. Empty wardrobe (outfit section):
+   > You haven't added any items to your digital wardrobe yet, but here is how you can style this classic Wrangler piece: Look 1 (Double Denim): Pair it with high-waisted, straight-leg dark wash jeans and a tucked-in white t-shirt… Look 2 (Contrast & Flow): Throw it over a floral midi slip dress and chunky black boots…
+
+3. Model unavailable:
+   > Found 90s Track Jacket — Navy/White Stripe ($45 on poshmark), but couldn't suggest an outfit for it: the AI model couldn't be reached. The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com. Your search itself worked, so once that's fixed, run the same query again.
+
+   Trace of that run. It stops at step 4, and `create_fit_card` is never
+   called:
+   ```
+   [4] suggest_outfit
+         in:  new_item='90s Track Jacket — Navy/White Stripe', wardrobe=10 items
+         out: ModelUnavailable: The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh k…
+         →    model unreachable, stopping before create_fit_card
+   ```
+   The same handler at `create_fit_card` keeps the outfit and says the fit
+   card is the step that failed. I tested that path by making
+   `create_fit_card` raise `ModelUnavailable` in a test script, because a
+   bad key always fails at `suggest_outfit` first.
+
+**Cold read.** I gave all three messages to Claude in a fresh conversation
+that couldn't see the code. I asked what it would try next as a user, and told
+it not to rewrite them. It could act on all three:
+- Empty search: it would change the words and then loosen size and price.
+  It pointed out the message doesn't say *how far* to loosen them, so it
+  would guess prices until something showed up. I'm leaving this as it is
+  for now and noting it as a possible improvement.
+- Empty wardrobe: it said this isn't really an error, because it got usable
+  looks. The hint "add items to your wardrobe" leads nowhere in the CLI,
+  because the CLI has no way to add wardrobe items. That sentence comes
+  from the model's reply, not from my code.
+- Model unavailable: clear. It would check the key and then make a new
+  one. Its only doubt was whether it needs to restart after editing `.env`.
+  It doesn't, because each `python app.py ask` reads `.env` fresh.
+
+---
+
 ## Run Log — Before
 
 <!-- Five criteria, five tries each, in this exact format.
@@ -429,16 +481,42 @@ that produced it:
      the same length, your branch isn't working — and this is the fastest way
      anyone will ever find that out. -->
 
-**Happy path**
+One `trace.step()` call per step in `agent.py::run_agent`. The MCP call
+shows as `search_listings (via MCP)`. The `→` line records the branch.
+
+**Happy path** (`python app.py ask 'vintage graphic tee under $30' --trace`)
 
 ```
-
+[1] parse_query
+      in:  'vintage graphic tee under $30'
+      out: description='vintage graphic tee', size=None, max_price=30.0
+[2] search_listings (via MCP)
+      in:  description='vintage graphic tee', size=None, max_price=30.0
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+      →    branch: 10 results, continuing
+[3] select_item
+      in:  10 results
+      out: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      →    took the first result, the best match
+[4] suggest_outfit
+      in:  new_item='Y2K Baby Tee — Butterfly Print', wardrobe=10 items
+      out: **Outfit 1: Y2K Streetwear** *   Y2K Baby Tee — Butterfly Print *   Baggy straight-leg jeans, dark wash *   Vi…
+[5] create_fit_card
+      in:  outfit=594 chars, new_item='Y2K Baby Tee — Butterfly Print'
+      out: Scored this Y2K Baby Tee — Butterfly Print for just $18 and I am obsessed with the early 2000s butterfly graph…
 ```
 
-**Empty search**
+**Empty search** (`python app.py ask 'designer ballgown size XXS under $5' --trace`)
+stops after step 2, so it never reaches the model:
 
 ```
-
+[1] parse_query
+      in:  'designer ballgown size XXS under $5'
+      out: description='designer ballgown', size='xxs', max_price=5.0
+[2] search_listings (via MCP)
+      in:  description='designer ballgown', size='xxs', max_price=5.0
+      out: [] (empty)
+      →    branch: empty, stopping before suggest_outfit
 ```
 
 **On the MCP move:** <!-- what changed in your code, and whether anything
