@@ -322,6 +322,41 @@ Can't write a fit card for Vintage Levi's 501 Jeans — Medium Wash: no outfit w
 
 ---
 
+## MCP: `search_listings` moved behind MCP
+
+- **Tool moved:** `search_listings`. It doesn't call the model, so its
+  results are the same on every run and easy to compare. `suggest_outfit`
+  and `create_fit_card` are still direct calls.
+- **Server (`mcp_server.py`):** registers `search_listings` with FastMCP.
+  The typed inputs match the Tool Inventory above (`description: str`,
+  `size: str | None`, `max_price: float | None`). The description is
+  written for an agent that can't see this code. It gives the units
+  (US dollars, inclusive), the size-match rule, the result limit (10),
+  the fields in each listing, and the empty case (`[]`, never null or an
+  error). The function calls the real implementation, imported under the
+  alias `_search_listings_impl`.
+- **Client (`agent.py`):** the `search` step of `run_agent()` now calls
+  `call_tool("search_listings", {...})` instead of the function.
+  `_no_results_message()` still calls `search_listings` directly. Those
+  extra searches only explain an empty result, and each MCP call starts a
+  new server process. This unit allows only the MCP move and one
+  improvement, so they stay as they were.
+- **Check:** `python mcp_client.py` lists `search_listings` with
+  `description: string`, `size: string (optional)` and
+  `max_price: number (optional)`. Comparing the direct call with the MCP
+  call on four inputs (`vintage graphic tee` ≤ $30, `jeans` size M,
+  `designer ballgown` XXS ≤ $5, `tee`) gave identical lists (`==` is True),
+  including both empty cases.
+- **End to end:** `python app.py ask 'vintage graphic tee under $30'` and
+  `python app.py ask 'designer ballgown size XXS under $5'` printed the
+  same output as before the move. Same item ("Y2K Baby Tee — Butterfly
+  Print — $18.0 on depop") and same empty-search message. Both model
+  prompts were served from cache, so the item passed to `suggest_outfit`
+  and `create_fit_card` was byte-for-byte the same as with the direct
+  call. **The call changed shape; the return value did not.**
+
+---
+
 ## Run Log — Before
 
 <!-- Five criteria, five tries each, in this exact format.

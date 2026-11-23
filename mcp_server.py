@@ -67,25 +67,32 @@ from tools import search_listings as _search_listings_impl  # noqa: F401 — you
 mcp = FastMCP("fitfindr", log_level="WARNING")
 
 
-# ── TODO: uncomment and fill this in ──────────────────────────────────────────
-#
-# @mcp.tool()
-# def search_listings(
-#     description: str,
-#     size: str | None = None,
-#     max_price: float | None = None,
-# ) -> list[dict]:
-#     """
-#     <-- YOUR DESCRIPTION GOES HERE.
-#
-#         One or two sentences. What does this tool do, what does it need, and
-#         what does it give back when it finds nothing? Written for a reader
-#         who cannot see the code.
-#     """
-#     return _search_listings_impl(description, size, max_price)
-#
-# ──────────────────────────────────────────────────────────────────────────────
-#
+@mcp.tool()
+def search_listings(
+    description: str,
+    size: str | None = None,
+    max_price: float | None = None,
+) -> list[dict]:
+    """
+    Search FitFindr's secondhand clothing listings by keywords, with an optional
+    size and price ceiling, and return the best matches first (at most 10).
+
+    Inputs: description is a few keywords for the item, e.g. "vintage graphic
+    tee"; a listing must contain at least one of those words in its title,
+    description or style tags. size (optional) is a size label such as "M" or
+    "8"; it matches case-insensitively against any part of a listing's size, so
+    "M" matches "S/M" but "L" does not match "XL". max_price (optional) is the
+    highest price in US dollars, inclusive (max_price=30 keeps a $30.00 item).
+    Leave size or max_price out to skip that filter.
+
+    Returns a list of listing objects, each with id, title, description,
+    category, style_tags, size, condition, price (dollars), colors, brand and
+    platform. When nothing matches, it returns an empty list [] (never null and
+    never an error).
+    """
+    return _search_listings_impl(description, size, max_price)
+
+
 # Two notes on the block above.
 #
 # The registered name is the *function* name — so the block above registers

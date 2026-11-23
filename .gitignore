@@ -21,3 +21,12 @@ Thumbs.db
 
 # NOTE: results/ is deliberately NOT ignored. Your run logs are evidence that
 # the test actually happened, and they're part of what gets graded. Commit them.
+
+# Personal study notes and copies of the assignment brief
+unit3requirments.md
+unit4requirments.md
+FitFindr 开发复习笔记（AI201 Unit 3）.docx
+FitFindr项目讲解(截至Unit 3).md
+# Development problem summaries (Unit 3, Unit 4, and Unit 4 drafts)
+FitFinder开发问题总结*.md
+FitFinder开发问题小结*.md
