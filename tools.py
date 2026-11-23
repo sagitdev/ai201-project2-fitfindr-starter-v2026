@@ -245,7 +245,10 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         "styled. Rules:\n"
         f"- Mention the item ({title}) once.\n"
         f"- Write the price exactly as {price_text}, once.\n"
-        f"- Mention the platform {platform} once.\n"
+        f"- The user just bought this item on {platform}. Mention {platform} "
+        "once, as the place they bought it. Do not say they are selling, "
+        "listing or reselling it, and do not say they found it anywhere else "
+        "(a thrift store, estate sale, flea market or bins).\n"
         "- Be specific about the vibe of the outfit.\n"
         "- Plain sentences only. No list of hashtags, no title line."
     )
