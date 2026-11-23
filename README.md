@@ -315,6 +315,53 @@ Can't write a fit card for Vintage Levi's 501 Jeans — Medium Wash: no outfit w
   with `AI201_CACHE=0` gave different wording each time while the price
   and platform stayed correct, which is what criterion 4 expects.
 
+**Unit 4**
+
+In this unit I had Claude Code write the changes one milestone at a time:
+the MCP registration, the handlers, the trace calls, `scenarios.py`,
+`score_run.py` and the prompt fix. I read each milestone and committed it
+myself. Three moments where what came back changed what I did:
+
+**Moment 3: a cold read of the failure messages**
+
+- *What I asked for:* I gave my three failure messages to Claude in a fresh
+  conversation that couldn't see the code. I asked what it would try next
+  as a user, and told it not to rewrite them.
+- *What came back:* It could act on all three. But it said the empty-search
+  message says to loosen size and price without saying how far. It also
+  asked whether it had to restart after fixing the key.
+- *What I changed:* nothing in the code. The rule allows only one
+  improvement, and the message already worked. I wrote both points into
+  Failure Modes, and the first one is item 4 in What's Still Broken.
+
+**Moment 4: arguing the opposite verdict**
+
+- *What I asked for:* I gave criterion 4, its target, the five sneaker
+  cards and my MET verdict to Claude, and asked it to argue MISSED as
+  strongly as it could.
+- *What came back:* Three arguments. Try 5 makes the user the seller. Try 1
+  invented "velcro straps". The cards describe clothes that don't match
+  the outfit.
+- *What I changed:* I checked each one against the data instead of taking
+  it on trust. The listing really says "Velcro straps". Each try gets a new
+  outfit from `suggest_outfit`, and every card matched its own. So two of
+  the three arguments failed. The seller one held, and it matched what I
+  had found reading all 45 cards. That is what led to revising criterion 4
+  and to the Milestone 5 fix.
+
+**Moment 5: a scorer that counted the wrong thing**
+
+- *What I asked for:* a keyword check (`platform_role_problems` in
+  `score_run.py`) to score the revised criterion automatically.
+- *What came back:* compared with my own reading of all 45 before-run cards
+  it agreed on 44. The one disagreement was a false positive: "they are
+  going to live on my feet" matched the pattern meant for "live on my
+  poshmark".
+- *What I changed:* I narrowed that pattern to "live on my
+  depop/poshmark/…". The check then agreed on all 45. After the fix I
+  still read all 45 after-run cards by hand, because a keyword list can
+  miss wording it has never seen.
+
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
      Don't fill these in during unit 3.
@@ -708,99 +755,26 @@ behaved differently afterwards. If the rewire didn't work, say exactly where it
 broke — the error text and the last thing that worked. That earns the point in
 full. -->
 
-
-
----
-
-## The Improvement
-
-<!-- What you changed, why your diagnosis pointed at it, and the after-run in
-     the same table format. One change, measured properly.
-
-     `python run_eval.py --label after` -->
-
-**What I changed:** one rule in the `create_fit_card` prompt
-(`tools.py`). Nothing else in the agent changed between the two runs.
-
-```diff
--        f"- Mention the platform {platform} once.\n"
-+        f"- The user just bought this item on {platform}. Mention {platform} "
-+        "once, as the place they bought it. Do not say they are selling, "
-+        "listing or reselling it, and do not say they found it anywhere else "
-+        "(a thrift store, estate sale, flea market or bins).\n"
-```
-
-**Which failure it was meant to fix:** the platform-role failure from my
-diagnosis. In the before run, 20 of 45 fit cards made the user the seller
-or named another source. The cause was that the prompt gave the platform
-with no role. The fix states the role, which is the missing fact, and
-names the two wrong stories the model kept telling. The system prompt
-("captions people post about their thrift finds") is unchanged, so that
-this stays one change.
-
-### Run Log — After
-
-Run: `python run_eval.py --label after`, same scenarios, same settings
-(caching off, 5 tries, temperature 0.9). Full log:
-[`results/run_2026-11-22_2215_after.md`](results/run_2026-11-22_2215_after.md).
-50 runs, 91 model calls, 0 crashes. Scored with
-`python score_run.py results/run_2026-11-22_2215_after.md`.
-
-| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
-|---|---|---|---|---|---|---|---|
-| 1. Matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
-| 2. Impossible query stops before suggest_outfit | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
-| 3. Search item = selected_item = suggest_outfit's new_item (by id) | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
-| 4. Fit card: 2-4 sentences, price, platform, no 'None' | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
-| 4r. *Revised* 4: the above, plus bought on the platform | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
-| 5. Search respects size and price limits (5 queries) | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
-
-**Before and after, side by side**
-
-| Measure | Before | After |
-|---|---|---|
-| Criteria 1, 2, 3, 5 | MET 5/5 each | MET 5/5 each |
-| Criterion 4 (original) | MET (5/5) | MET (5/5) |
-| **Criterion 4r (revised)** | **MET (4/5)**, try 5: "They are live now on my poshmark" | **MET (5/5)** |
-| **Fit cards that misstate the platform, all scenarios** | **20 of 45** | **0 of 45** |
-| depop items | 15 of 25 | 0 of 25 |
-| poshmark items | 5 of 20 | 0 of 20 |
-| Fit cards opening with "Scored" / "Just scored" / "I just scored" | 32 of 45 | 44 of 45 |
-| Average fit card length | 292 chars | 274 chars |
-
-Real output, criterion 4r, Try 5 (`tools.py::create_fit_card`, same
-sneakers, same $48, same poshmark):
-
-```
-Before: Total Lizzie McGuire energy from these Platform Sneakers — White Chunky Sole I just picked up for $48. I paired them with baggy dark wash jeans and a cropped zip hoodie for the ultimate 2000s streetwear look. They are live now on my poshmark if anyone else wants to lean into the chunky shoe trend.
-
-After:  Scored these Platform Sneakers — White Chunky Sole on poshmark for $48. The velcro straps and chunky soles give off the absolute best early 2000s energy. I’ve been wearing them with baggy dark wash denim and a cropped zip hoodie for a casual street style look.
-```
-
-**Did it help, and how do I know:** Yes, for the failure it targeted.
-- Cards that misstate the platform went from 20 of 45 to 0 of 45, and
-  revised criterion 4 went from MET with no margin (4/5) to 5/5.
-- I didn't rely on the keyword check alone. I read all 45 after-run cards,
-  because a new wording ("selling", "in my closet") could slip past the
-  patterns. None says the user is selling the item or got it anywhere else.
-- Everything that passed before still passes. The change only touches
-  `create_fit_card`, and criteria 2, 3 and 5 never reach it.
-
-What it cost, honestly:
-- **The captions got more uniform.** 44 of 45 now open with some form of
-  "Scored this X on <platform> for $Y". Before it was 32 of 45, with more
-  "Found this…" and other openings. Telling the model exactly where and how
-  the item was bought seems to have handed it a template for the first
-  sentence. No criterion measures this. If I tightened criterion 4 again,
-  "no two cards for different items share an opening sentence" is the
-  clause I'd add.
-- **A small new slip:** one card says "90s Silk Silk Slip Dress". It's a
-  one-off model typo, not caused by the change, but I'm reporting it
-  because it's in the run.
-- **Not fixed, as expected:** empty-wardrobe cards still describe pieces
-  the user doesn't own as if they wore them ("Threw it on over a floral
-  midi slip dress"). That was a separate finding, and this change wasn't
-  aimed at it.
+- **Code changes:** `mcp_server.py` registers `search_listings` with typed
+  inputs and a description written for an outside agent. In
+  `agent.py::run_agent`, the search step calls
+  `call_tool("search_listings", {...})` instead of the function. The other
+  two tools are still direct calls.
+- **Did anything behave differently?** The return value didn't. The direct
+  call and the MCP call gave identical lists (`==` True) on four inputs,
+  including two empty ones. Both example queries printed the same output as
+  before the move. The trace now shows the step as
+  `search_listings (via MCP)`.
+- **Two things did change:**
+  1. **Speed.** Each MCP call starts a new server process. That took about
+     1.16 s per call against about 1 ms for the direct call (average of 5
+     calls each). This is why `_no_results_message` still searches directly.
+  2. **A new way to fail.** If the server can't start, `call_tool` raises
+     `MCPError`, and `run_agent` doesn't catch it. I tested this by
+     pointing the client at a missing server file. The run stopped after
+     `parse_query`, and `MCPError: Couldn't call 'search_listings' over
+     MCP…` came out of `run_agent`. In the CLI, `app.py`'s catch-all prints
+     it, but the agent has no handler of its own. See What's Still Broken.
 
 ---
 
@@ -809,6 +783,54 @@ What it cost, honestly:
 <!-- For each criterion still missed: what you'd do, and why you stopped where
      you did. "I ran out of time" is fine if it's true. Pretending nothing is
      left is not. -->
+
+**No criterion is still missed.** All five met their targets in both runs,
+and revised criterion 4 went from 4/5 to 5/5 after the fix. That doesn't
+mean nothing is broken. This is what's left, most important first.
+
+1. **The MCP call has no failure handler.** If the server can't start,
+   `MCPError` escapes `run_agent` (tested; see On the MCP move). This is a
+   real gap: it's the one tool call in the loop with no handler.
+   - *What I'd do:* catch `MCPError` around the search step, the same way
+     `ModelUnavailable` is handled. The message would say the search
+     service couldn't start and suggest running `python mcp_server.py` to
+     see why.
+   - *Why I stopped:* this unit allows the MCP move and one improvement.
+     I used the improvement on the fit-card failure, because that one
+     showed up in 20 of 45 real runs. This one only appears when I break
+     the server on purpose.
+2. **Empty-wardrobe fit cards claim things the user doesn't own.** For
+   example, "Threw it on over a floral midi slip dress" when the wardrobe
+   is empty. `suggest_outfit` correctly gives general advice, but
+   `create_fit_card` writes every outfit as something the user wore.
+   - *What I'd do:* when the wardrobe is empty, tell the card prompt the
+     outfit is a suggestion ("could pair it with…"), and add a criterion
+     for it.
+   - *Why I stopped:* it's a second prompt change, and that would be a
+     second improvement.
+3. **The captions got more uniform after the fix.** 44 of 45 now open with
+   "Scored this X on <platform> for $Y", up from 32 of 45.
+   - *What I'd do:* add "no two cards for different items share an
+     opening sentence" to criterion 4, measure it, and then loosen the
+     prompt's wording.
+   - *Why I stopped:* nothing measured it until I read the after-run cards,
+     and changing the prompt again would undo the one change I'm testing.
+4. **The empty-search message doesn't say how far to loosen.** The cold
+   read in Failure Modes found this: it says to loosen size and price, but
+   not to what, so a user has to guess.
+   - *What I'd do:* add the nearest real option, such as the cheapest
+     listing in that size, or the sizes that exist under that price.
+   - *Why I stopped:* the message was already actionable (criterion 2
+     passed 5/5), so it ranked below the fit-card failure.
+5. **Some criteria were tested on one item.** Criteria 3 and 4 each used
+   a single listing. The before run showed why that matters: the criterion-4
+   item happened to be one of the cleanest, and 5 of 9 items would have
+   missed the revised target. Next time I'd write criteria 3 and 4 as
+   "for 5 different items", the way criterion 5 already is.
+6. **Known search limits from unit 3 are unchanged.** There are no plurals
+   or synonyms, so "tees" doesn't find "tee". These were out of scope this
+   unit, because only the MCP move and one improvement were allowed.
+
 
 
 
